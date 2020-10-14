@@ -71,7 +71,7 @@ for epoch in range(num_epochs):
         X2 = split_dataset[1]
         # X3 = split_dataset[2]
         # X4 = split_dataset[3]
-        Y = split_dataset[4]
+        Y = split_dataset[4].flatten().view(-1, 6*predict_days)
 
         # init_hidden = model.initHidden(len(input_feature))
         optimizer.zero_grad()
@@ -89,13 +89,13 @@ for epoch in range(num_epochs):
     test_X2 = test[1]
     # test_X3 = test[2]
     # test_X4 = test[3]
-    test_Y = test[4]
+    test_Y = test[4].flatten().view(-1, 6*predict_days)
 
     test_outputs = model(test_X1.float(), test_X2.float())
     predict_loss = criterion(test_outputs, test_Y.float())
     test_loss.append(predict_loss.item())
 
-    baseline_predict_loss = criterion(test[1], test_Y.float())
+    baseline_predict_loss = criterion(test[1].flatten().view(-1, 6*predict_days), test_Y.float())
     baseline_loss.append(baseline_predict_loss)
 
 # draw the loss of training data, testing data, and two baseline
@@ -109,12 +109,13 @@ plt.legend(loc='best')
 plt.savefig('./img/loss.png')
 plt.show()
 
-train_outputs = model(train[0].float(), train[1].float()).detach().numpy()
-test_outputs = model(test[0].float(), test[1].float()).detach().numpy()
-train_ans = train[4].detach().numpy()
-test_ans = test[4].detach().numpy()
-train_baseline = train[1].detach().numpy()
-test_baseline = test[1].detach().numpy()
+split_dataset = torch.split(train, split_size_or_sections=[30, predict_days, predict_days, predict_days, predict_days], dim=2)
+train_outputs = model(split_dataset[0].transpose(2, 1).float(), split_dataset[1].float()).cpu().detach().numpy()
+test_outputs = model(test[0].transpose(2, 1).float(), test[1].float()).cpu().detach().numpy()
+train_ans = train[4].cpu().detach().numpy()
+test_ans = test[4].cpu().detach().numpy()
+train_baseline = train[1].cpu().detach().numpy()
+test_baseline = test[1].cpu().detach().numpy()
 
 len_train = len(train_ans)
 len_test = len(test_ans)

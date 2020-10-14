@@ -11,22 +11,22 @@ class Model(nn.Module):
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.fc1 = nn.Linear(hidden_size, 15)
-        self.fc2 = nn.Linear(195, 180)
+        self.fc2 = nn.Linear(15+6*180, 6*180)
         self.sigmoid = nn.Sigmoid()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self, input, input_2, hidden=None):
-        x1, hidden = self.lstm(input, hidden)
+        x1, (hn, cn) = self.lstm(input, hidden)
         x1 = x1[:, -1]  # ht
+        # x1 = hn
         x1 = self.fc1(x1)
         x1 = self.sigmoid(x1)
-        x1 = x1.repeat(1, 6).view(x1.shape[0], -1, 15)
 
-        x2 = input_2
+        x2 = input_2.flatten().view(input_2.shape[0], -1)
         # x3 = input_3
         # x4 = input_4
-        x = torch.cat((x1, x2), dim=2)
+        x = torch.cat((x1, x2), dim=-1)
         x = self.fc2(x)
         output = self.sigmoid(x)
 
