@@ -3,7 +3,6 @@ import numpy as np
 import torch
 import datetime as dt
 import pickle
-from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 
 daily_rate = pd.read_csv('./data/owlnest_daily_rate.csv')
@@ -16,9 +15,6 @@ daily_rate = daily_rate.loc[:, ['Date', 'Yilan', 'Tainan', 'Nantou', 'Taitung', 
 order = pd.read_csv('./data/order.csv')
 order['date'] = order['date'].apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d').timestamp())
 order['booking_dt'] = order['booking_dt'].apply(lambda x: dt.datetime.strptime(x.split(' ')[0], '%Y-%m-%d').timestamp())
-# sample data
-# order = order[order['booking_dt'].apply(lambda x: x < dt.datetime(2018, 6, 6).timestamp())]
-# order.to_csv('./data/sample_data.csv')
 
 hotel = pd.read_csv('./data/hotel.csv')
 hotel['start_dt'] = hotel['start_dt'].apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d').timestamp())
@@ -29,8 +25,18 @@ vacation = vacation.loc[:, ['Date', 'isVacation']]
 vacation['Date'] = vacation['Date'].apply(lambda x: dt.datetime.strptime(x, '%Y/%m/%d').timestamp())
 vacation['isVacation'] = vacation['isVacation'].apply(lambda x: 1 if x else 0)
 
-predict_days = 180
+predict_days = 7
 
+# choose the range of training set and testing set
+training_start_year = dt.datetime.fromtimestamp(dt.datetime(2019, 1, 1).timestamp() - 86400 * predict_days).year
+training_start_month = dt.datetime.fromtimestamp(dt.datetime(2019, 1, 1).timestamp() - 86400 * predict_days).month
+training_start_day = dt.datetime.fromtimestamp(dt.datetime(2019, 1, 1).timestamp() - 86400 * predict_days).day
+middle_year = dt.datetime.fromtimestamp(dt.datetime(2019, 10, 1).timestamp() - 86400 * predict_days).year
+middle_month = dt.datetime.fromtimestamp(dt.datetime(2019, 10, 1).timestamp() - 86400 * predict_days).month
+middle_day = dt.datetime.fromtimestamp(dt.datetime(2019, 10, 1).timestamp() - 86400 * predict_days).day
+testing_end_year = dt.datetime.fromtimestamp(dt.datetime(2019, 4, 1).timestamp() - 86400 * predict_days).year
+testing_end_month = dt.datetime.fromtimestamp(dt.datetime(2019, 4, 1).timestamp() - 86400 * predict_days).month
+testing_end_day = dt.datetime.fromtimestamp(dt.datetime(2019, 4, 1).timestamp() - 86400 * predict_days).day
 
 def getFeatureTarget(year1, month1, day1, year2, month2, day2):
     feature = []
@@ -39,8 +45,7 @@ def getFeatureTarget(year1, month1, day1, year2, month2, day2):
     feature_4 = []  # is vacation or not
     target = []
     for row in daily_rate.itertuples():
-        if row.Date >= dt.datetime(year1, month1, day1).timestamp() and row.Date < dt.datetime(year2, month2,
-                                                                                               day2).timestamp():
+        if row.Date >= dt.datetime(year1, month1, day1).timestamp() and row.Date < dt.datetime(year2, month2, day2).timestamp():
             # find the target daily rate
             future_date = []
             for i in range(1, predict_days + 1):
@@ -75,9 +80,7 @@ def getFeatureTarget(year1, month1, day1, year2, month2, day2):
                 hotel_in_city = hotel[hotel['city'] == daily_rate.columns[i]]
                 hotel_in_city = hotel_in_city[hotel_in_city['start_dt'].apply(lambda x: x <= row.Date)]
                 hotel_in_city = hotel_in_city[hotel_in_city['end_dt'].apply(lambda x: x >= row.Date)]
-                total_room = 0
-                for hotel_element in hotel_in_city.itertuples():
-                    total_room += hotel_element.total_rooms
+                total_room = sum(hotel_in_city['total_rooms'])
 
                 for j in range(len(future_date)):
                     city_before_date_filtering = city_before_date[city_before_date['date'] == future_date[j]]
@@ -86,12 +89,7 @@ def getFeatureTarget(year1, month1, day1, year2, month2, day2):
                     cancel_element = cancel_element[cancel_element['cancel_dt'].apply(
                         lambda x: dt.datetime.strptime(x.split(' ')[0], '%Y-%m-%d').timestamp() > row.Date)]
                     city_before_date_filtering = pd.concat([not_cancel_element, cancel_element])
-                    num = 0
-                    for row_2 in city_before_date_filtering.itertuples():
-                        num += 1
-                        if row_2.qty > 1:
-                            for k in range(int(row_2.qty) - 1):
-                                num += 1
+                    num = sum(city_before_date_filtering['qty'])
                     if total_room == 0:
                         element = 0.0
                     else:
@@ -119,10 +117,13 @@ def getFeatureTarget(year1, month1, day1, year2, month2, day2):
 
     return feature, feature_2, feature_3, feature_4, target
 
+
 # training set: 20190101~20190930
 # testing set: 20191001~20200331
-train_feature, train_feature_2, train_feature_3, train_feature_4, train_target = getFeatureTarget(2018, 12, 25, 2019, 9, 24)
-test_feature, test_feature_2, test_feature_3, test_feature_4, test_target = getFeatureTarget(2019, 9, 25, 2020, 3, 25)
+train_feature, train_feature_2, train_feature_3, train_feature_4, train_target =\
+    getFeatureTarget(training_start_year, training_start_month, training_start_day, middle_year, middle_month, middle_day)
+test_feature, test_feature_2, test_feature_3, test_feature_4, test_target =\
+    getFeatureTarget(middle_year, middle_month, middle_day, testing_end_year, testing_end_month, testing_end_day)
 
 len_train = len(train_target)
 len_test = len(test_target)
